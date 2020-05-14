@@ -28,24 +28,27 @@ namespace LockingCenter.Mutex
                 throw new Exception("unable to make connection!");
         }
 
-        private bool Ping()
+        private bool Connect(Func<TcpClient, bool> connectionHandler)
         {
+            TcpClient client = null;
             try
             {
-                TcpClient client = 
-                    this.Connect();
-                client.Close();
-
-                return true;
+                client =
+                    new TcpClient(this._remoteEndPoint.Item1, this._remoteEndPoint.Item2);
+                return connectionHandler(client);
             }
             catch
             {
                 return false;
             }
+            finally
+            {
+                client?.Close();
+            }
         }
-        
-        private TcpClient Connect() =>
-            new TcpClient(this._remoteEndPoint.Item1, this._remoteEndPoint.Item2);
+
+        private bool Ping() =>
+            this.Connect(client => true);
 
         private bool PreparePackage(string key, byte action, out byte[] package)
         {
@@ -75,7 +78,11 @@ namespace LockingCenter.Mutex
                 binaryWriter.Write(action);
                 binaryWriter.Flush();
 
-                package = contentStream.GetBuffer();
+                package = new byte[contentStream.Length];
+                
+                contentStream.Seek(0, SeekOrigin.Begin);
+                contentStream.Read(package, 0, package.Length);
+                
                 return true;
             }
             catch
@@ -89,78 +96,45 @@ namespace LockingCenter.Mutex
             }
         }
 
-        private bool Result(TcpClient client)
-        {
-            try
+        private bool Query(string key, byte action) =>
+            this.Connect(client =>
             {
-                byte r =
-                    (byte) client.GetStream().ReadByte();
+                if (!this.PreparePackage(key, action, out byte[] package))
+                    return false;
 
-                return (char) r == '+';
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private bool Query(TcpClient client, string key, byte action)
-        {
-            if (!this.PreparePackage(key, action, out byte[] package))
-                return false;
-
-            try
-            {
-                client.GetStream().Write(package, 0, package.Length);
-            }
-            catch
-            {
-                return false;
-            }
-
-            return this.Result(client);
-        }
+                try
+                {
+                    client.GetStream().Write(
+                        package, 0, package.Length);
+                    byte r =
+                        (byte) client.GetStream().ReadByte();
+                    return (char) r == '+';
+                }
+                catch
+                {
+                    return false;
+                }
+            });
         
         public void Lock(string key)
         {
-            TcpClient client =
-                this.Connect();
-            
-            while (!this.Query(client, key, 1)) {}
-            
-            client.Close();
+            while (!this.Query(key, 1)) {}
         }
 
         public void Unlock(string key)
         {
-            TcpClient client =
-                this.Connect();
-            
-            while (!this.Query(client, key, 2)) {}
-            
-            client.Close();
+            while (!this.Query(key, 2)) {}
         }
 
         public void Wait(string key)
         {
-            TcpClient client =
-                this.Connect();
-            
-            while (!this.Query(client, key, 1)) {}
-            
-            while (!this.Query(client, key, 2)) {}
-            
-            client.Close();
+            while (!this.Query(key, 1)) {}
+            while (!this.Query(key, 2)) {}
         }
         
         public void Reset(string key)
         {
-            TcpClient client =
-                this.Connect();
-            
-            while (!this.Query(client, key, 3)) {}
-            
-            client.Close();
+            while (!this.Query(key, 3)) {}
         }
     }
 }
