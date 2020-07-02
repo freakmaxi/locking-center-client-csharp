@@ -50,13 +50,23 @@ namespace LockingCenter.Mutex
         private bool Ping() =>
             this.Connect(client => true);
 
-        private bool PreparePackage(string key, bool emptyAllowed, MutexActions action, out byte[] package)
+        private bool PreparePackage(MutexActions action, string key, string sourceAddress, out byte[] package)
         {
+            if (string.IsNullOrEmpty(sourceAddress))
+                sourceAddress = string.Empty;
+            
             package = null;
-            
-            if (!emptyAllowed && string.IsNullOrEmpty(key) || key.Length > 128)
-                return false;
-            
+
+            switch (action)
+            {
+                case MutexActions.Lock:
+                case MutexActions.Unlock:
+                case MutexActions.ResetByKey:
+                    if (string.IsNullOrEmpty(key) || key.Length > 128)
+                        return false;
+                    break;
+            }
+
             MemoryStream contentStream = null;
             BinaryWriter binaryWriter = null;
 
@@ -66,16 +76,45 @@ namespace LockingCenter.Mutex
                     new MemoryStream();
                 binaryWriter = 
                     new BinaryWriter(contentStream);
-                
-                byte keySize =
-                    (byte) key.Length;
-                binaryWriter.Write(keySize);
-
-                byte[] keyBytes =
-                    System.Text.Encoding.UTF8.GetBytes(key);
-                binaryWriter.Write(keyBytes, 0, keyBytes.Length);
 
                 binaryWriter.Write((byte) action);
+                
+                switch (action)
+                {
+                    case MutexActions.Lock:
+                    case MutexActions.Unlock:
+                    case MutexActions.ResetByKey:
+                        byte keySize =
+                            (byte) key.Length;
+                        binaryWriter.Write(keySize);
+
+                        byte[] keyBytes =
+                            System.Text.Encoding.UTF8.GetBytes(key);
+                        binaryWriter.Write(keyBytes, 0, keyBytes.Length);
+
+                        if (action == MutexActions.Lock)
+                        {
+                            byte sourceAddressSizeL =
+                                (byte) sourceAddress.Length;
+                            binaryWriter.Write(sourceAddressSizeL);
+
+                            byte[] sourceAddressBytesL =
+                                System.Text.Encoding.UTF8.GetBytes(sourceAddress);
+                            binaryWriter.Write(sourceAddressBytesL, 0, sourceAddressBytesL.Length);
+                        }
+
+                        break;
+                    case MutexActions.ResetBySource:
+                        byte sourceAddressSizeR =
+                            (byte) sourceAddress.Length;
+                        binaryWriter.Write(sourceAddressSizeR);
+
+                        byte[] sourceAddressBytesR =
+                            System.Text.Encoding.UTF8.GetBytes(sourceAddress);
+                        binaryWriter.Write(sourceAddressBytesR, 0, sourceAddressBytesR.Length);
+
+                        break;
+                }
                 binaryWriter.Flush();
 
                 package = new byte[contentStream.Length];
@@ -96,10 +135,10 @@ namespace LockingCenter.Mutex
             }
         }
 
-        private bool Query(string key, bool emptyAllowed, MutexActions action) =>
+        private bool Query(MutexActions action, string key, string sourceAddress = null) =>
             this.Connect(client =>
             {
-                if (!this.PreparePackage(key, emptyAllowed, action, out byte[] package))
+                if (!this.PreparePackage(action, key, sourceAddress, out byte[] package))
                     return false;
 
                 try
@@ -116,32 +155,32 @@ namespace LockingCenter.Mutex
                 }
             });
         
-        public void Lock(string key)
+        public void Lock(string key, string sourceAddress)
         {
-            while (!this.Query(key, false,MutexActions.Lock)) {}
+            while (!this.Query(MutexActions.Lock, key, sourceAddress)) {}
         }
 
         public void Unlock(string key)
         {
-            while (!this.Query(key, false, MutexActions.Unlock)) {}
+            while (!this.Query(MutexActions.Unlock, key)) {}
         }
 
         public void Wait(string key)
         {
-            while (!this.Query(key, false, MutexActions.Lock)) {}
-            while (!this.Query(key, false, MutexActions.Unlock)) {}
+            while (!this.Query(MutexActions.Lock, key)) {}
+            while (!this.Query(MutexActions.Unlock, key)) {}
         }
         
         public void ResetByKey(string key)
         {
-            while (!this.Query(key, false, MutexActions.ResetByKey)) {}
+            while (!this.Query(MutexActions.ResetByKey, key)) {}
         }
         
         public void ResetBySource(string sourceAddr = null)
         {
             if (string.IsNullOrEmpty(sourceAddr)) sourceAddr = string.Empty;
             
-            while (!this.Query(sourceAddr, true, MutexActions.ResetBySource)) {}
+            while (!this.Query(MutexActions.ResetBySource, string.Empty, sourceAddr)) {}
         }
     }
 }

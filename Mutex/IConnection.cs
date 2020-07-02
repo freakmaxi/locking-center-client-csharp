@@ -2,7 +2,7 @@ namespace LockingCenter.Mutex
 {
     public interface IConnection
     {
-        void Lock(string key);
+        void Lock(string key, string sourceAddress);
         void Unlock(string key);
         void Wait(string key);
         void ResetByKey(string key);
