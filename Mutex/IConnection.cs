@@ -5,6 +5,7 @@ namespace LockingCenter.Mutex
         void Lock(string key);
         void Unlock(string key);
         void Wait(string key);
-        void Reset(string key);
+        void ResetByKey(string key);
+        void ResetBySource(string sourceAddr = null);
     }
 }

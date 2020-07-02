@@ -50,11 +50,11 @@ namespace LockingCenter.Mutex
         private bool Ping() =>
             this.Connect(client => true);
 
-        private bool PreparePackage(string key, byte action, out byte[] package)
+        private bool PreparePackage(string key, bool emptyAllowed, MutexActions action, out byte[] package)
         {
             package = null;
             
-            if (string.IsNullOrEmpty(key) || key.Length > 128)
+            if (!emptyAllowed && string.IsNullOrEmpty(key) || key.Length > 128)
                 return false;
             
             MemoryStream contentStream = null;
@@ -75,7 +75,7 @@ namespace LockingCenter.Mutex
                     System.Text.Encoding.UTF8.GetBytes(key);
                 binaryWriter.Write(keyBytes, 0, keyBytes.Length);
 
-                binaryWriter.Write(action);
+                binaryWriter.Write((byte) action);
                 binaryWriter.Flush();
 
                 package = new byte[contentStream.Length];
@@ -96,10 +96,10 @@ namespace LockingCenter.Mutex
             }
         }
 
-        private bool Query(string key, byte action) =>
+        private bool Query(string key, bool emptyAllowed, MutexActions action) =>
             this.Connect(client =>
             {
-                if (!this.PreparePackage(key, action, out byte[] package))
+                if (!this.PreparePackage(key, emptyAllowed, action, out byte[] package))
                     return false;
 
                 try
@@ -118,23 +118,30 @@ namespace LockingCenter.Mutex
         
         public void Lock(string key)
         {
-            while (!this.Query(key, 1)) {}
+            while (!this.Query(key, false,MutexActions.Lock)) {}
         }
 
         public void Unlock(string key)
         {
-            while (!this.Query(key, 2)) {}
+            while (!this.Query(key, false, MutexActions.Unlock)) {}
         }
 
         public void Wait(string key)
         {
-            while (!this.Query(key, 1)) {}
-            while (!this.Query(key, 2)) {}
+            while (!this.Query(key, false, MutexActions.Lock)) {}
+            while (!this.Query(key, false, MutexActions.Unlock)) {}
         }
         
-        public void Reset(string key)
+        public void ResetByKey(string key)
         {
-            while (!this.Query(key, 3)) {}
+            while (!this.Query(key, false, MutexActions.ResetByKey)) {}
+        }
+        
+        public void ResetBySource(string sourceAddr = null)
+        {
+            if (string.IsNullOrEmpty(sourceAddr)) sourceAddr = string.Empty;
+            
+            while (!this.Query(sourceAddr, true, MutexActions.ResetBySource)) {}
         }
     }
 }
