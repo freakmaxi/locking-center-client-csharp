@@ -7,8 +7,9 @@ namespace LockingCenter.Mutex
     public class Connection : IConnection
     {
         private readonly Tuple<string, int> _remoteEndPoint;
+        private readonly string _sourceAddress;
 
-        public Connection(string serverPort)
+        public Connection(string serverPort, string sourceAddress = null)
         {
             if (string.IsNullOrEmpty(serverPort))
                 throw new ArgumentNullException(nameof(serverPort));
@@ -23,6 +24,7 @@ namespace LockingCenter.Mutex
             
             this._remoteEndPoint = 
                 new Tuple<string, int>(parts[0], port);
+            this._sourceAddress = sourceAddress;
             
             if (!this.Ping())
                 throw new Exception("unable to make connection!");
@@ -155,9 +157,9 @@ namespace LockingCenter.Mutex
                 }
             });
         
-        public void Lock(string key, string sourceAddress)
+        public void Lock(string key)
         {
-            while (!this.Query(MutexActions.Lock, key, sourceAddress)) {}
+            while (!this.Query(MutexActions.Lock, key, this._sourceAddress)) {}
         }
 
         public void Unlock(string key)
